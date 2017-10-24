@@ -1,6 +1,5 @@
 all:
-	gcc -o cassandra main.c -lcassandra
+	gcc -o project2 lex.c main.c -lcassandra
 
 clean:
-	rm -f cassandra
-
+	rm -f project2
