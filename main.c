@@ -5,6 +5,7 @@
 #include "config.h"
 
 
+
 char *readline(char *prompt);
 
 static int tty = 0;
@@ -72,6 +73,28 @@ cli()
 			continue;
 
 		}
+
+        if (strcmp(cmd, "show") == 0 || strcmp(cmd, "s") == 0) {
+            cli_show();
+            continue;
+        }
+
+        if (strcmp(cmd, "list") == 0 || strcmp(cmd, "l") == 0) {
+            cli_list();
+            continue;
+        }
+
+        // if use but it takes in arguments
+
+        if (strcmp(cmd, "get") == 0 || strcmp(cmd, "g") == 0) {
+            cli_get();
+            continue;
+        }
+
+        // if statement for insert that looks for a key and a value
+
+
+
 	}
 }
 
