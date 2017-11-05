@@ -17,6 +17,24 @@ cli_about()
 }
 
 static void
+cli_show()
+{
+	printf("You want to show some stuff\n");
+}
+
+static void
+cli_list()
+{
+	printf("You want to list some stuff\n");
+}
+
+static void
+cli_get()
+{
+	printf("You want to get some stuff\n");
+}
+
+static void
 cli_help()
 {
 	return;
