@@ -5,7 +5,8 @@
 #include "config.h"
 #include "cassandra.h"
 
-
+char used_keyspace[35];
+char used_table[35];
 
 char *readline(char *prompt);
 
@@ -45,37 +46,68 @@ cli_help()
 
 // My Additions
 
+CassCluster* create_cluster(){
+
+	CassCluster* cluster = cass_cluster_new();
+	cass_cluster_set_contact_points(cluster, "127.0.0.1");
+	return cluster;
+}
+
+void
+print_error(CassFuture* future){
+	const char* message;
+	size_t message_length;
+	cass_future_error_message(future, &message, &message_length);
+	fprintf(stderr, "Error: %.*s\n", (int)message_length, message);
+}
+
+CassError connect_session(CassSession* session, const CassCluster* cluster) {
+	CassError rc = CASS_OK;
+	CassFuture* future = cass_session_connect(session, cluster);
+
+	cass_future_wait(future);
+
+	rc = cass_future_error_code(future);
+	if(rc != CASS_OK) {
+		printf("connect session failed\n");
+		print_error(future);
+	}
+	cass_future_free(future);
+	printf("connect session done\n");
+
+	return rc;
+}
 
 
 static void
-cli_show(){
+cli_show(CassSession* session){
 
 	printf("You ran show\n");
 
 }
 
 static void
-cli_list(){
+cli_list(CassSession* session){
 	printf("you ran list\n");
 }
 
 static void
-cli_use(){
+cli_use(CassSession* session){
 	printf("you ran use\n");
 }
 
 static void
-cli_get(){
+cli_get(CassSession* session){
 	printf("you ran get\n");
 }
 
 static void
-cli_insert(){
+cli_insert(CassSession* session){
 	printf("you ran insert\n");
 }
 
 void
-cli()
+cli(CassSession* session)
 {
 	char *cmdline = NULL;
 	char cmd[BUFSIZE], prompt[BUFSIZE];
@@ -127,17 +159,31 @@ cli()
 		}
 	
 		if (strcmp(cmd, "show") == 0 || strcmp(cmd, "s") == 0) {
-			cli_show();
+			cli_show(session);
 			continue;
 
 		}
 		if (strcmp(cmd, "list") == 0 || strcmp(cmd, "l") == 0) {
-			cli_list();
+			cli_list(session);
 			continue;
 		}
 
 		if (strcmp(cmd, "use") == 0 || strcmp(cmd, "u") == 0) {
-			cli_use();
+
+			nextarg(cmdline, &pos, ".", cmd);
+            printf("%s\n", cmd);
+			strcpy(used_keyspace, cmd);
+
+			nextarg(cmdline, &pos, " ", cmd);
+            char *new_cmd = cmd;
+			*new_cmd++;
+			printf("%s\n", new_cmd);
+
+			strcpy(used_table, new_cmd);
+			// used_table is the table
+			// user_key space is the key space
+
+			cli_use(session);
 			continue;
 		}
 
@@ -156,6 +202,26 @@ cli()
 int
 main(int argc, char**argv)
 {
-	cli();
+	CassCluster* cluster = create_cluster();
+	CassSession* session = cass_session_new();
+	CassFuture* close_future = NULL;
+
+	if(connect_session(session, cluster) != CASS_OK){
+		cass_cluster_free(cluster);
+		cass_session_free(session);
+		return -1;
+	}
+
+
+	cli(session);
+
+	close_future = cass_session_close(session);
+
+	cass_future_wait(close_future);
+	cass_future_free(close_future);
+
+	cass_cluster_free(cluster);
+	cass_session_free(session);
+
 	exit(0);
 }
