@@ -3,11 +3,32 @@
 #include <string.h>
 #include <unistd.h>
 #include "config.h"
+#include "cassandra.h"
+
 
 
 char *readline(char *prompt);
 
 static int tty = 0;
+
+
+
+static int
+issep(char *sep, char ch)
+{
+	int i, len;
+
+	if (sep == NULL)
+		return 0;
+
+	for (len = strlen(sep), i = 0; i < len; i++)
+		if (ch == sep[i])
+			return 1;
+	return 0;
+}
+
+
+
 
 static void
 cli_about()
@@ -19,6 +40,38 @@ static void
 cli_help()
 {
 	return;
+}
+
+
+// My Additions
+
+
+
+static void
+cli_show(){
+
+	printf("You ran show\n");
+
+}
+
+static void
+cli_list(){
+	printf("you ran list\n");
+}
+
+static void
+cli_use(){
+	printf("you ran use\n");
+}
+
+static void
+cli_get(){
+	printf("you ran get\n");
+}
+
+static void
+cli_insert(){
+	printf("you ran insert\n");
 }
 
 void
@@ -71,6 +124,31 @@ cli()
 			cli_about();
 			continue;
 
+		}
+	
+		if (strcmp(cmd, "show") == 0 || strcmp(cmd, "s") == 0) {
+			cli_show();
+			continue;
+
+		}
+		if (strcmp(cmd, "list") == 0 || strcmp(cmd, "l") == 0) {
+			cli_list();
+			continue;
+		}
+
+		if (strcmp(cmd, "use") == 0 || strcmp(cmd, "u") == 0) {
+			cli_use();
+			continue;
+		}
+
+		if (strcmp(cmd, "get") == 0 || strcmp(cmd, "g") == 0) {
+			cli_get();
+			continue;
+		}
+
+		if (strcmp(cmd, "insert") == 0 || strcmp(cmd, "i") == 0) {
+			cli_insert();
+			continue;
 		}
 	}
 }
