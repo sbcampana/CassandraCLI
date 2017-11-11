@@ -48,7 +48,7 @@ cli_help()
 
 // My Additions
 
-CassCluster* create_cluster(){
+static CassCluster* create_cluster(){
 
 	CassCluster* cluster = cass_cluster_new();
 	cass_cluster_set_contact_points(cluster, "127.0.0.1");
@@ -63,28 +63,27 @@ print_error(CassFuture* future){
 	fprintf(stderr, "Error: %.*s\n", (int)message_length, message);
 }
 
-CassError connect_session(CassSession* session, const CassCluster* cluster) {
-	CassError rc = CASS_OK;
+static CassError connect_session(CassSession* session, const CassCluster* cluster) {
+	CassError err;
 	CassFuture* future = cass_session_connect(session, cluster);
 
 	cass_future_wait(future);
 
-	rc = cass_future_error_code(future);
-	if(rc != CASS_OK) {
+	err = cass_future_error_code(future);
+	if(err != CASS_OK) {
 		printf("connect session failed\n");
 		print_error(future);
 	}
 	cass_future_free(future);
 	printf("connect session done\n");
 
-	return rc;
+	return err;
 }
 
-CassIterator* execute_query(CassSession* session, const char *query) {
+static CassResult* execute_query(CassSession* session, const char *query) {
 
-	char return_arr[100];
 
-	CassError rc = CASS_OK;
+	CassError err;
 	CassFuture* future = NULL;
 	CassStatement* statement = cass_statement_new(query, 0);
 
@@ -95,19 +94,19 @@ CassIterator* execute_query(CassSession* session, const char *query) {
 	cass_statement_free(statement);
 
 	// check future error
-	rc = cass_future_error_code(future);
-	if(rc != CASS_OK){
+	err = cass_future_error_code(future);
+	if(err != CASS_OK){
 		printf("future error\n");
 		print_error(future);
 	}
 
 	// get result
-	const CassResult* result = cass_future_get_result(future);
+	CassResult* result = cass_future_get_result(future);
 
 	// check result error
 	if(result == NULL){
 		// Handle Error
-		printf("result = NULL");
+		printf("result = NULL\n");
 		cass_future_free(future);
 		return NULL;
 	}
@@ -116,8 +115,7 @@ CassIterator* execute_query(CassSession* session, const char *query) {
 	cass_future_free(future);
 
 	// Iterator
-	CassIterator* row_iterator = cass_iterator_from_result(result);
-	return row_iterator;
+	return result;
 }
 
 
@@ -128,7 +126,8 @@ cli_show(CassSession* session){
 
 	const char *query = "SELECT * FROM system_schema.keyspaces;";
 	// write execute_query()
-	CassIterator* row_iterator = execute_query(session,query);
+	CassResult* result = execute_query(session,query);
+	CassIterator* row_iterator = cass_iterator_from_result(result);
 	while(cass_iterator_next(row_iterator)) {
 		const char *svalue;
 		size_t size = sizeof(svalue);
@@ -144,15 +143,59 @@ static void
 cli_list(CassSession* session){
 	printf("you ran list\n");
 	// list the table names for the current used_keyspace
+
+    char query[100];
+
+    strcpy(query, "SELECT * FROM system_schema.tables WHERE keyspace_name= '");
+	strcat(query, used_keyspace);
+	strcat(query, "';");
+
+	CassResult *result = execute_query(session, query);
+
+	if(result != NULL){
+		if(cass_result_row_count(result) == 0){
+			printf("%s %s \n", "No tables found in keyspace", used_keyspace);
+
+		}
+
+		CassIterator* row_iterator = cass_iterator_from_result(result);
+
+		while(cass_iterator_next(row_iterator)){
+			size_t i = 0;
+			const char *svalue = "";
+			size_t size;
+			const CassRow* row = cass_iterator_get_row(row_iterator);
+			const CassValue *value = cass_row_get_column_by_name(row, "table_name");
+			cass_value_get_string(value, &svalue, &size);
+			printf("%s \n", svalue);
+		}
+		cass_iterator_free(row_iterator);
+	} else {
+		printf("PLEASE CHOOSE A KEYSPACE");
+	}
 }
 
 static void
 cli_use(CassSession* session){
 
 	printf("you ran use\n");
-
+	char query[500];
 	// check if used_keyspace exists and if it doesn't create it
+	strcpy(query, "CREATE KEYSPACE IF NOT EXISTS ");
+	strcat(query, used_keyspace);
+	strcat(query, " WITH REPLICATION = {'class' : 'SimpleStrategy', 'replication_factor' : 1};");
+
+	execute_query(session, query);
+
 	// else set global variable used_keyspace and used_table
+	char query2[500];
+	strcpy(query2, "CREATE TABLE IF NOT EXISTS ");
+	strcat(query2, used_keyspace);
+	strcat(query2, ".");
+	strcat(query2, used_table);
+	strcat(query2, " (key int PRIMARY KEY, value text);");
+
+	execute_query(session, query2);
 }
 
 static void
@@ -169,14 +212,17 @@ cli_get(CassSession* session, char* key){
 	if(result != NULL){
 		CassIterator* row_iterator = cass_iterator_from_result(result);
 		while(cass_iterator_next(row_iterator)){
-			size_t i = 0;
+
 			const char *svalue = "";
-			size_t size;
+
 			const CassRow* row = cass_iterator_get_row(row_iterator);
 			const CassValue *value = cass_row_get_column_by_name(row,key);
 
 			CassValueType type = cass_value_type(value);
-			if(type == CASS_VALUE_TYPE_BOOLEAN){
+			if(cass_value_is_null(value)){
+				printf("null\n");
+			}
+			else if(type == CASS_VALUE_TYPE_BOOLEAN){
 				cass_bool_t t;
 				cass_value_get_bool(value, &t);
 				if(t){
@@ -203,31 +249,14 @@ cli_get(CassSession* session, char* key){
 				cass_value_get_string(value, &s, &size);
 				printf("%s\n", s);
 			}
-			else if(type == CASS_VALUE_TYPE_UUID){
-
-
-			}/*
-			else if(type == CASS_VALUE_TYPE_LIST){
-
-			}
-			else if(type == CASS_VALUE_TYPE_MAP){
-
-			}
-			else if(type == CASS_VALUE_TYPE_BLOB){
-
-			}*/
 			else {
-				if(cass_value_is_null(value)){
-					printf("null");
-				}
-				else{
-					printf("YOUR TYPE IS NOT HANDALABLE");
-				}
+				printf("YOUR TYPE IS NOT HANDALABLE\n");
+
 			}
 			printf("%s\n", svalue);
 		}
 	} else {
-		printf("PLEASE CHOOSE A KEY SPACE.");
+		printf("PLEASE CHOOSE A KEY SPACE.\n");
 	}
 
 
@@ -241,6 +270,24 @@ cli_insert(CassSession* session, char key[25], char value[25]){
 	char query[500];
 	// insert a key and value into the used_keyspace.used_table
 	//strcpy(query, )
+
+	strcpy(query, "INSERT INTO ");
+	strcat(query, used_keyspace);
+	strcat(query, ".");
+	strcat(query, used_table);
+	strcat(query, "(");
+	strcat(query, key);
+	strcat(query, ") VALUES (");
+	strcat(query, value);
+	strcat(query, ");");
+
+	CassResult* result = execute_query(session, query);
+	if(result == NULL){
+		printf("INVALID INPUT!\n");
+	}
+	else {
+		printf("PLEASE CHOOSE A KEYSPACE AND TABLE\n");
+	}
 }
 
 void
